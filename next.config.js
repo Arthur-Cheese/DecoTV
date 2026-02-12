@@ -46,8 +46,6 @@ const nextConfig = {
       },
     ],
   },
-  // 添加 static export 配置
-  output: 'export',  
 };
 
 module.exports = nextConfig;
