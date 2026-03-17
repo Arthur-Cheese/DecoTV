@@ -43,6 +43,8 @@ import {
   Video,
 } from 'lucide-react';
 import { GripVertical } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -51,9 +53,18 @@ import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import { DEFAULT_PANSOU_SERVER_URL } from '@/lib/pansou';
 
 import DataMigration from '@/components/DataMigration';
-import ImportExportModal from '@/components/ImportExportModal';
+import type { ImportExportModalProps } from '@/components/ImportExportModal';
 import PageLayout from '@/components/PageLayout';
-import PanSouConfigPanel from '@/components/PanSouConfigPanel';
+import type { PanSouConfigPanelProps } from '@/components/PanSouConfigPanel';
+
+const ImportExportModal = dynamic<ImportExportModalProps>(
+  () => import('../../components/ImportExportModal').then((mod) => mod.default),
+  { ssr: false },
+);
+const PanSouConfigPanel = dynamic<PanSouConfigPanelProps>(
+  () => import('../../components/PanSouConfigPanel').then((mod) => mod.default),
+  { ssr: false },
+);
 
 // 统一按钮样式系统
 const buttonStyles = {
@@ -4187,14 +4198,18 @@ const VideoSourceConfig = ({
       />
 
       {/* 导入导出模态框 */}
-      <ImportExportModal
-        isOpen={importExportModal.isOpen}
-        mode={importExportModal.mode}
-        onClose={() => setImportExportModal({ isOpen: false, mode: 'import' })}
-        onImport={handleImportSources}
-        onExport={handleExportSources}
-        result={importExportModal.result}
-      />
+      {importExportModal.isOpen && (
+        <ImportExportModal
+          isOpen={importExportModal.isOpen}
+          mode={importExportModal.mode}
+          onClose={() =>
+            setImportExportModal({ isOpen: false, mode: 'import' })
+          }
+          onImport={handleImportSources}
+          onExport={handleExportSources}
+          result={importExportModal.result}
+        />
+      )}
 
       {/* 批量操作确认弹窗 */}
       {confirmModal.isOpen &&
@@ -5142,7 +5157,7 @@ const SiteConfigComponent = ({
           config.SiteConfig.DoubanImageProxyType || 'cmliussss-cdn-tencent',
         DoubanImageProxy: config.SiteConfig.DoubanImageProxy || '',
         DisableYellowFilter: config.SiteConfig.DisableYellowFilter || false,
-        FluidSearch: config.SiteConfig.FluidSearch || true,
+        FluidSearch: config.SiteConfig.FluidSearch ?? true,
         LoginBackground:
           config.SiteConfig.LoginBackground ||
           'https://pan.yyds.nyc.mn/background.png',
@@ -7067,29 +7082,36 @@ const DanmuConfigComponent = ({ config, refreshConfig }: DanmuConfigProps) => {
       {/* 服务器配置区域 */}
       {danmuSettings.enabled && (
         <div className='space-y-6'>
-          {/* 自定义弹幕提示 */}
-          <div className='rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/15 p-4'>
-            <div className='flex items-start gap-2'>
-              <AlertTriangle className='w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5' />
-              <div className='space-y-1'>
-                <p className='text-sm font-medium text-amber-900 dark:text-amber-200'>
-                  内置演示站仅供测试，极其不稳定，强烈建议用户自行部署。
-                </p>
-                <p className='text-xs text-amber-700 dark:text-amber-300 flex flex-wrap items-center gap-1.5'>
-                  自部署教程:
-                  <a
-                    href={DEPLOYMENT_GUIDE_URL}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='inline-flex items-center gap-1 font-medium underline hover:text-amber-900 dark:hover:text-amber-100'
-                  >
-                    huangxd-/danmu_api
-                    <ExternalLink className='w-3 h-3' />
-                  </a>
-                </p>
+          {/* 仅当使用内置演示站（或未配置自定义地址）时显示警告 */}
+          {(!danmuSettings.serverUrl ||
+            DEMO_DANMU_SERVERS.some(
+              (s) =>
+                normalizeServerUrl(s.url) ===
+                normalizeServerUrl(danmuSettings.serverUrl),
+            )) && (
+            <div className='rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/15 p-4'>
+              <div className='flex items-start gap-2'>
+                <AlertTriangle className='w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5' />
+                <div className='space-y-1'>
+                  <p className='text-sm font-medium text-amber-900 dark:text-amber-200'>
+                    内置演示站仅供测试，极其不稳定，强烈建议用户自行部署。
+                  </p>
+                  <p className='text-xs text-amber-700 dark:text-amber-300 flex flex-wrap items-center gap-1.5'>
+                    自部署教程:
+                    <a
+                      href={DEPLOYMENT_GUIDE_URL}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='inline-flex items-center gap-1 font-medium underline hover:text-amber-900 dark:hover:text-amber-100'
+                    >
+                      huangxd-/danmu_api
+                      <ExternalLink className='w-3 h-3' />
+                    </a>
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* 服务器地址 & Token */}
           <div className='bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden'>
@@ -8277,6 +8299,7 @@ const PanSouConfigComponent = ({
 };
 
 function AdminPageClient() {
+  const router = useRouter();
   const { alertModal, showAlert, hideAlert } = useAlertModal();
   const { isLoading, withLoading } = useLoadingState();
   const [config, setConfig] = useState<AdminConfig | null>(null);
@@ -8386,6 +8409,11 @@ function AdminPageClient() {
     },
     [loadLocalConfig],
   );
+
+  const refreshConfigAfterMutation = useCallback(async () => {
+    await fetchConfig();
+    router.refresh();
+  }, [fetchConfig, router]);
 
   // 同步配置到后端内存（本地模式专用）
   const syncConfigToBackend = useCallback(async (configToSync: AdminConfig) => {
@@ -8603,7 +8631,7 @@ function AdminPageClient() {
           throw new Error(`重置失败: ${response.status}`);
         }
         showSuccess('重置成功，请刷新页面！', showAlert);
-        await fetchConfig();
+        await refreshConfigAfterMutation();
         setShowResetConfigModal(false);
       } catch (err) {
         showError(err instanceof Error ? err.message : '重置失败', showAlert);
@@ -8732,7 +8760,7 @@ function AdminPageClient() {
             >
               <ConfigFileComponent
                 config={config}
-                refreshConfig={fetchConfig}
+                refreshConfig={refreshConfigAfterMutation}
                 storageMode={storageMode}
                 updateConfig={updateConfig}
               />
@@ -8751,7 +8779,10 @@ function AdminPageClient() {
             isExpanded={expandedTabs.siteConfig}
             onToggle={() => toggleTab('siteConfig')}
           >
-            <SiteConfigComponent config={config} refreshConfig={fetchConfig} />
+            <SiteConfigComponent
+              config={config}
+              refreshConfig={refreshConfigAfterMutation}
+            />
           </CollapsibleTab>
 
           <div className='space-y-4'>
@@ -8767,7 +8798,7 @@ function AdminPageClient() {
               <UserConfig
                 config={config}
                 role={role}
-                refreshConfig={fetchConfig}
+                refreshConfig={refreshConfigAfterMutation}
               />
             </CollapsibleTab>
 
@@ -8782,7 +8813,7 @@ function AdminPageClient() {
             >
               <VideoSourceConfig
                 config={config}
-                refreshConfig={fetchConfig}
+                refreshConfig={refreshConfigAfterMutation}
                 storageMode={storageMode}
                 updateConfig={updateConfig}
               />
@@ -8799,7 +8830,7 @@ function AdminPageClient() {
             >
               <LiveSourceConfig
                 config={config}
-                refreshConfig={fetchConfig}
+                refreshConfig={refreshConfigAfterMutation}
                 storageMode={storageMode}
                 updateConfig={updateConfig}
               />
@@ -9345,7 +9376,7 @@ function AdminPageClient() {
             >
               <DanmuConfigComponent
                 config={config}
-                refreshConfig={fetchConfig}
+                refreshConfig={refreshConfigAfterMutation}
               />
             </CollapsibleTab>
 
@@ -9357,7 +9388,10 @@ function AdminPageClient() {
               isExpanded={expandedTabs.pansouConfig}
               onToggle={() => toggleTab('pansouConfig')}
             >
-              <PanSouConfigPanel config={config} refreshConfig={fetchConfig} />
+              <PanSouConfigPanel
+                config={config}
+                refreshConfig={refreshConfigAfterMutation}
+              />
             </CollapsibleTab>
 
             {/* 分类配置标签 */}
@@ -9372,7 +9406,10 @@ function AdminPageClient() {
               isExpanded={expandedTabs.categoryConfig}
               onToggle={() => toggleTab('categoryConfig')}
             >
-              <CategoryConfig config={config} refreshConfig={fetchConfig} />
+              <CategoryConfig
+                config={config}
+                refreshConfig={refreshConfigAfterMutation}
+              />
             </CollapsibleTab>
 
             {/* 数据迁移标签 - 仅站长可见 */}
@@ -9388,7 +9425,7 @@ function AdminPageClient() {
                 isExpanded={expandedTabs.dataMigration}
                 onToggle={() => toggleTab('dataMigration')}
               >
-                <DataMigration onRefreshConfig={fetchConfig} />
+                <DataMigration onRefreshConfig={refreshConfigAfterMutation} />
               </CollapsibleTab>
             )}
           </div>
